@@ -95,7 +95,7 @@ struct HapticScriptTests {
 
     let profile = SwingProfile.default
 
-    @Test("beats are evenly spaced, the last is accented, and contact is one beat after it")
+    @Test("beats are evenly spaced, the last is accented, and contact is on it")
     func grid() {
         for bowler in Delivery.Bowler.allCases {
             let d = Delivery(bowler: bowler, line: 0, length: .good, pace: 30)
@@ -107,15 +107,16 @@ struct HapticScriptTests {
             for g in gaps { #expect(abs(g - interval) < 1e-9) }
             #expect(s.entries.last!.event == HapticVocabulary.accent)
             #expect(s.entries.dropLast().allSatisfy { $0.event == HapticVocabulary.beat })
-            #expect(abs(s.contactAt - (times.last! + interval)) < 1e-9)
+            #expect(abs(s.contactAt - times.last!) < 1e-9)
         }
     }
 
-    @Test("the last cue comes before contact: nothing is played at the moment to swing")
-    func silenceAtContact() {
+    @Test("the hit beat is played at the moment of contact: you hit the buzz, not the gap after it")
+    func hitOnTheBeat() {
         let s = Delivery(bowler: .fast, line: 0, length: .yorker, pace: 38).script(for: profile)
-        #expect(s.duration < s.contactAt)
-        #expect(!s.entries.contains { abs($0.at - s.contactAt) < 1e-9 })
+        let hit = s.entries.first { abs($0.at - s.contactAt) < 1e-9 }
+        #expect(hit?.event == HapticVocabulary.accent)
+        #expect(s.entries.count == 5)
     }
 
     @Test("length does not move the grid — it is unlearnable at pace, so it only changes the outcome")
@@ -142,7 +143,7 @@ struct HapticScriptTests {
         #expect(bs.entries.filter { $0.event == HapticVocabulary.tick }.count == 2)
         #expect(fs.entries.filter { $0.event == HapticVocabulary.beat }.count == IncomingBall.beats - 1)
         #expect(fs.entries.last!.event == HapticVocabulary.accent)
-        #expect(abs(fs.contactAt - (fs.entries.last!.at + fh.beat(for: profile))) < 1e-9)
+        #expect(abs(fs.contactAt - fs.entries.last!.at) < 1e-9)
         // The beats start after the side call, with time to move the hand.
         #expect(fs.entries.first { $0.event == HapticVocabulary.beat }!.at == IncomingBall.sideLead)
     }
@@ -155,13 +156,13 @@ struct HapticScriptTests {
         #expect(abs(IncomingBall(side: .forehand, pace: 22, depth: 0.5).beat(for: profile) - profile.beat) < 1e-9)
     }
 
-    @Test("their serve has no side call; every count is four beats")
+    @Test("their serve has no side call; every count is five beats")
     func serveScript() {
         let s = IncomingBall(side: .forehand, pace: 30, depth: 0.8, isServe: true).script(for: profile)
         #expect(!s.entries.contains { $0.event == HapticVocabulary.tick })
-        #expect(s.entries.count == 4)
+        #expect(s.entries.count == 5)
         let mine = Serve.script(for: profile)
-        #expect(mine.entries.count == 4)
+        #expect(mine.entries.count == 5)
         #expect(mine.entries.last!.event == HapticVocabulary.accent)
         #expect(abs(mine.contactAt - 4 * profile.beat) < 1e-9)
     }

@@ -92,20 +92,25 @@ public enum Bowling {
 
         let pace = (shot.releaseSpeed * handToBall).clamped(to: 14...42)
 
-        // Line: where the release direction meets the batter's crease. The
-        // play frame was calibrated pointing at the stumps, so zero is middle.
+        // Line, from the release direction's yaw off the calibrated line.
+        // Deliberately forgiving: a hand a few degrees off is still at the
+        // stumps, and it takes sixty degrees to bowl a wide. A real bowler
+        // corrects line by feel over many balls; a person with a phone gets
+        // one go and no run-up, and the first version made every ball wide.
         // The bowler's right (+z) is the right-handed batter's leg side, so
         // "off side positive" is the negative of it.
-        var line = -projection * tan((shot.direction.horizontalAngle ?? 0).clamped(to: -0.5...0.5))
+        let yaw = (shot.direction.horizontalAngle ?? 0).degrees
+        var line = -(yaw / 60).clamped(to: -1...1) * 1.0
 
-        // Length from the release angle. A ball released flatter goes fuller.
+        // Length from the release angle, in wide bands centred on a good
+        // length, so most balls land somewhere a batter has to play.
         let elevation = shot.direction.elevation.degrees
         let length: Delivery.Length
         switch elevation {
-        case 3...: length = .fullToss
-        case -2..<3: length = .yorker
-        case -8 ..< -2: length = .full
-        case -16 ..< -8: length = .good
+        case 30...: length = .fullToss
+        case 12..<30: length = .yorker
+        case 0..<12: length = .full
+        case -25..<0: length = .good
         default: length = .short
         }
 

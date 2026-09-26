@@ -3,8 +3,8 @@ import SwingCore
 
 /// One ball, bowled at the player.
 ///
-/// The player cannot see it. What they get is a count-in: four evenly spaced
-/// beats, the last one accented, and contact exactly one beat later. The beat
+/// The player cannot see it. What they get is a count-in: five evenly spaced
+/// beats, the last one accented, and contact on that last beat. The beat
 /// is the player's own swing duration (see ``SwingProfile``), scaled by the
 /// bowler: a quick bowler's beat is shorter, a spinner's longer.
 public struct Delivery: Hashable, Sendable {
@@ -65,9 +65,9 @@ public struct Delivery: Hashable, Sendable {
     /// less the bowler's stride and the batter's stance.
     static let flightDistance = 17.5
 
-    /// Beats in the count-in, including the accented last one. Four, always:
-    /// three to hear the interval, one to confirm it.
-    public static let beats = 4
+    /// Beats in the count-in, including the accented hit beat. Five, always:
+    /// four to hear the interval, and the fifth is the ball.
+    public static let beats = 5
 
     public func beat(for profile: SwingProfile) -> TimeInterval {
         profile.beat(scaledBy: bowler.beatFactor)

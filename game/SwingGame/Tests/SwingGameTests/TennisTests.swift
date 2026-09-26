@@ -34,10 +34,23 @@ struct StrokeTests {
         #expect(r.announcement.hasPrefix("Too late"))
     }
 
-    @Test("swung downward goes into the net")
+    @Test("a steep downward face goes into the net, and so does a swing with nothing on it")
     func net() {
-        let r = Stroke.returnBall(shot: swing(up: -0.2), ball: forehand, cue: TestShots.cue())
-        #expect(r.outcome == .net)
+        #expect(Stroke.returnBall(shot: swing(up: -0.7), ball: forehand, cue: TestShots.cue()).outcome == .net)
+        #expect(Stroke.returnBall(shot: swing(speed: 1.5, up: 0), ball: forehand, cue: TestShots.cue()).outcome == .net)
+    }
+
+    @Test("depth is power: a soft swing is short, a full one is deep, only past full is long")
+    func depthIsPower() {
+        func depth(_ speed: Double) -> Double? {
+            if case .inPlay(let p) = Stroke.returnBall(shot: swing(speed: speed, up: 0), ball: forehand, cue: TestShots.cue()).outcome { return p.depth }
+            return nil
+        }
+        let soft = depth(6), medium = depth(9), full = depth(Stroke.fullSwingSpeed)
+        #expect(soft != nil && medium != nil && full != nil)
+        #expect(soft! < medium! && medium! < full!)
+        #expect(full! > 0.85)
+        #expect(Stroke.returnBall(shot: swing(speed: Stroke.fullSwingSpeed * 1.25, up: 0), ball: forehand, cue: TestShots.cue()).outcome == .outLong)
     }
 
     @Test("swung too hard and high goes long")
@@ -64,10 +77,10 @@ struct StrokeTests {
         #expect(Ballistics.topspin(of: back) < -0.5)
     }
 
-    @Test("swung well off the line goes wide")
+    @Test("it takes forty-five degrees off the line to go wide; thirty is still in")
     func wide() {
-        let r = Stroke.returnBall(shot: swing(across: 0.5), ball: forehand, cue: TestShots.cue())
-        #expect(r.outcome == .outWide)
+        #expect(Stroke.returnBall(shot: swing(across: 1.5), ball: forehand, cue: TestShots.cue()).outcome == .outWide)
+        #expect(Stroke.returnBall(shot: swing(across: 0.55), ball: forehand, cue: TestShots.cue()).outcome.isIn)
     }
 
     @Test("early on a forehand goes cross-court, late goes down the line")
@@ -93,8 +106,8 @@ struct StrokeTests {
 
     @Test("a deep, fast, on-time ball is a better shot than a short soft one")
     func quality() {
-        let strong = Stroke.returnBall(shot: swing(speed: 12, up: 0.2), ball: forehand, cue: TestShots.cue())
-        let weak = Stroke.returnBall(shot: swing(at: 0.06, speed: 9, up: 0.15), ball: forehand, cue: TestShots.cue())
+        let strong = Stroke.returnBall(shot: swing(speed: 11, up: 0.15), ball: forehand, cue: TestShots.cue())
+        let weak = Stroke.returnBall(shot: swing(at: 0.07, speed: 7, up: 0.15), ball: forehand, cue: TestShots.cue())
         guard case .inPlay(let s) = strong.outcome, case .inPlay(let w) = weak.outcome else {
             Issue.record("expected both in: \(strong.outcome) \(weak.outcome)"); return
         }
@@ -118,7 +131,7 @@ struct StrokeTests {
         // Hit downward from 2.5 m, hard: the box is 6.4 m past the net.
         let good = Stroke.serve(shot: swing(speed: 14, up: -0.08), cue: TestShots.cue(tolerance: Serve.tolerance(for: .default)))
         #expect(good.outcome.isIn, "\(good.outcome)")
-        let long = Stroke.serve(shot: swing(speed: 14, up: 0.25), cue: TestShots.cue(tolerance: Serve.tolerance(for: .default)))
+        let long = Stroke.serve(shot: swing(speed: 17, up: 0.25), cue: TestShots.cue(tolerance: Serve.tolerance(for: .default)))
         #expect(long.outcome == .outLong)
         #expect(long.announcement == "Long. Fault.")
         let netted = Stroke.serve(shot: swing(speed: 14, up: -0.6), cue: TestShots.cue(tolerance: Serve.tolerance(for: .default)))

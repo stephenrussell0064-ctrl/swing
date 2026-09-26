@@ -36,20 +36,21 @@ struct BowlingTests {
 
     @Test("release angle sets the length")
     func length() {
-        #expect(Bowling.ball(from: bowl(elevation: -20))!.length == .short)
+        #expect(Bowling.ball(from: bowl(elevation: -30))!.length == .short)
         #expect(Bowling.ball(from: bowl(elevation: -10))!.length == .good)
-        #expect(Bowling.ball(from: bowl(elevation: -5))!.length == .full)
-        #expect(Bowling.ball(from: bowl(elevation: 0))!.length == .yorker)
-        #expect(Bowling.ball(from: bowl(elevation: 5))!.length == .fullToss)
+        #expect(Bowling.ball(from: bowl(elevation: 5))!.length == .full)
+        #expect(Bowling.ball(from: bowl(elevation: 20))!.length == .yorker)
+        #expect(Bowling.ball(from: bowl(elevation: 35))!.length == .fullToss)
     }
 
     @Test("straight at the calibrated line is middle stump; yawing off it drifts the line")
     func line() {
         #expect(Bowling.ball(from: bowl())!.isStraight)
-        let drift = Bowling.ball(from: bowl(yaw: 3))!
+        #expect(Bowling.ball(from: bowl(yaw: 5))!.isStraight)
+        let drift = Bowling.ball(from: bowl(yaw: 20))!
         #expect(!drift.isStraight)
         #expect(!drift.isWide)
-        let wide = Bowling.ball(from: bowl(yaw: 6))!
+        let wide = Bowling.ball(from: bowl(yaw: 65))!
         #expect(wide.isWide)
         #expect(Bowling.face(wide, ballIndex: 0, seed: 1).outcome == .wide)
     }
@@ -77,7 +78,7 @@ struct BowlingTests {
 
     @Test("a full toss always goes to the boundary")
     func fullToss() {
-        let ball = Bowling.ball(from: bowl(elevation: 6))!
+        let ball = Bowling.ball(from: bowl(elevation: 35))!
         for i in 0..<20 {
             let o = Bowling.face(ball, ballIndex: i, seed: 99).outcome
             #expect(o == .four || o == .six)
@@ -95,7 +96,7 @@ struct BowlingTests {
     @Test("over a long spell, good-length bowling takes wickets and concedes less than full tosses")
     func goodLengthPays() {
         let good = Bowling.ball(from: bowl(speed: 14, elevation: -10))!
-        let tosses = Bowling.ball(from: bowl(speed: 14, elevation: 6))!
+        let tosses = Bowling.ball(from: bowl(speed: 14, elevation: 35))!
         var goodRuns = 0, goodWickets = 0, tossRuns = 0
         for i in 0..<120 {
             let g = Bowling.face(good, ballIndex: i, seed: 7).outcome

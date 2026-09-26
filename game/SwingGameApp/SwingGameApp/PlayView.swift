@@ -129,6 +129,11 @@ private struct PlayScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if model.isRunning {
+                        Button("Stop", systemImage: "stop.fill", role: .destructive) { model.stop() }
+                    }
+                    Button("Restart", systemImage: "arrow.counterclockwise") { model.restart() }
+                    Divider()
                     Toggle("Tap instead of swing", isOn: $model.useTap)
                     Toggle("Mute voice", isOn: Binding(
                         get: { model.announcer.isMuted },
@@ -198,7 +203,6 @@ private struct PlayScreen: View {
             } else {
                 stanceIndicator
             }
-            controls
         }
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity)
@@ -289,29 +293,4 @@ private struct PlayScreen: View {
         }
     }
 
-    private var controls: some View {
-        HStack(spacing: 12) {
-            if model.isRunning {
-                Button(role: .destructive) {
-                    model.stop()
-                } label: {
-                    Label("Stop", systemImage: "stop.fill")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                Button {
-                    model.restart()
-                } label: {
-                    Label(model.cricket == nil && model.tennis == nil ? "Play" : "Restart", systemImage: "arrow.counterclockwise")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-            }
-        }
-        .padding(.horizontal, 20)
-    }
 }

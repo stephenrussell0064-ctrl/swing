@@ -35,24 +35,39 @@ public struct StrokeResult: Hashable, Sendable {
 }
 
 /// Racket meets ball. Pure.
+///
+/// Depth is **power**: how hard you swung, as a fraction of a full swing.
+/// A gentle swing drops it short, a full one lands on the baseline, and only
+/// swinging *past* full capacity puts it long. The racket-face angle nudges
+/// that and a steep downward face finds the net; it does not decide depth on
+/// its own, because the face angle a phone reports mid-swing is the least
+/// reliable thing it knows, and the first version sent every ball long on it.
+///
+/// Line is forgiving for the same reason: it takes forty-five degrees off the
+/// target line to go wide.
 public enum Stroke {
 
-    /// Racket-hand speed with a phone in it to ball speed. Strings are a
-    /// trampoline and the ball is already coming.
-    static let racketToBall = 1.4
-    static let paceReturned = 0.25
+    /// Hand speed, m/s, that counts as a full swing. About 22 rad/s with a
+    /// phone at arm's length: a proper hit, not a waggle.
+    static let fullSwingSpeed = 13.0
+    /// A serve is hit harder; the box is shorter.
+    static let fullServeSpeed = 16.0
+    /// Power below this drops into the net; above the upper bound is long.
+    static let netPower = 0.22
+    static let longPower = 1.05
+    /// Degrees of face elevation per unit of power. Fifteen degrees up adds
+    /// about a seventh of a swing's worth of depth — a nudge, not a decision.
+    static let elevationPerPower = 100.0
+    /// A face steeper than this downward goes into the net regardless.
+    static let netFace = -28.0
+    /// Degrees of yaw for a ball to reach the sideline.
+    static let yawToSideline = 45.0
     /// Metres of lateral steer per unit of timing error. Early on a forehand
     /// goes cross-court, late goes down the line.
-    static let steerPerTolerance = 2.8
-    static let contactHeight = 1.0
-    /// Below this launch angle the ball goes into the net, whatever its speed.
-    static let netClearance = -3.0
-    /// The ball leaves along the racket *face*, not the hand's path. A
-    /// groundstroke swings low-to-high at 20° or more and the ball comes off
-    /// at 5–10°, so the hand's elevation is compressed, and a face is
-    /// naturally a little open.
-    static let launchPerElevation = 0.5
-    static let launchOffset = 3.0
+    static let steerPerTolerance = 1.0
+    /// Ball speed off a full swing, m/s. For the opponent's difficulty and
+    /// the screen, not for where it lands.
+    static let racketToBall = 1.4
 
     public static func returnBall(
         shot: Shot?,
@@ -74,22 +89,16 @@ public enum Stroke {
 
         // Note what is *not* checked: whether the swing was a forehand or a
         // backhand. The direction of travel cannot tell them apart from an
-        // angled shot — on a court four metres wide, any swing across the
-        // body far enough to count as "the wrong stroke" is already wide.
-        // `Shot.attitude` (which way the face pointed) probably can, but not
-        // until there are recorded forehands and backhands to look at.
-        var quality = timing.quality
+        // angled shot. `Shot.attitude` probably can, once there are recorded
+        // forehands and backhands to look at.
 
         // Forehand early → toward the non-dominant side (cross-court), late →
         // dominant side (down the line). Backhand is mirrored.
         let sideSign = ball.side == .forehand ? 1.0 : -1.0
         let steer = (timing.error / timing.tolerance) * steerPerTolerance * sideSign
 
-        let exitSpeed = (shot.releaseSpeed * racketToBall * (0.55 + 0.45 * quality)) + ball.pace * paceReturned
-        return land(
-            shot: s, exitSpeed: exitSpeed, steer: steer, quality: &quality, timing: timing,
-            contactHeight: contactHeight, mustClear: IncomingBall.netDistance, mustNotPass: IncomingBall.courtLength
-        )
+        let power = power(of: s, timing: timing, full: fullSwingSpeed)
+        return land(shot: s, power: power, steer: steer, timing: timing, boxOnly: false)
     }
 
     /// Your serve. Must land in the far service box.
@@ -102,12 +111,8 @@ public enum Stroke {
             return StrokeResult(outcome: .miss, timing: timing, announcement: "Missed the toss. Fault.", haptic: HapticVocabulary.miss)
         }
         let s = handedness.asRightHanded(shot)
-        var quality = timing.quality
-        let exitSpeed = shot.releaseSpeed * racketToBall * 1.15 * (0.6 + 0.4 * quality)
-        var result = land(
-            shot: s, exitSpeed: exitSpeed, steer: 0, quality: &quality, timing: timing,
-            contactHeight: Serve.contactHeight, mustClear: IncomingBall.netDistance, mustNotPass: IncomingBall.serviceLine
-        )
+        let power = power(of: s, timing: timing, full: fullServeSpeed)
+        var result = land(shot: s, power: power, steer: 0, timing: timing, boxOnly: true)
         switch result.outcome {
         case .outLong: result.announcement = "Long. Fault."
         case .outWide: result.announcement = "Wide. Fault."
@@ -121,36 +126,39 @@ public enum Stroke {
 
     // MARK: -
 
-    private static func land(
-        shot: Shot, exitSpeed: Double, steer: Double, quality: inout Double, timing: Timing,
-        contactHeight: Double, mustClear: Double, mustNotPass: Double
-    ) -> StrokeResult {
-        let launch = shot.direction.elevation.degrees * launchPerElevation + launchOffset
-        if launch < netClearance {
-            return StrokeResult(outcome: .net, timing: timing, announcement: "Into the net.", haptic: HapticVocabulary.mishit)
-        }
-        let spin = Ballistics.topspin(of: shot)
-        // Topspin dips, so it can be hit harder and still land; slice floats.
-        let spinFactor = 1 - 0.30 * spin
-        let carry = Ballistics.carry(speed: exitSpeed, elevation: launch.radians, height: contactHeight) * spinFactor
+    /// How much of a full swing this was, after timing, face angle and spin.
+    private static func power(of shot: Shot, timing: Timing, full: Double) -> Double {
+        // A mistimed hit is a weaker hit.
+        let swing = (shot.releaseSpeed / full) * (0.6 + 0.4 * timing.quality)
+        let face = shot.direction.elevation.degrees / elevationPerPower
+        // Topspin dips, so the same swing lands shorter; slice floats it.
+        let spin = 1 - 0.35 * Ballistics.topspin(of: shot)
+        return max(0, (swing + face) * spin)
+    }
 
-        if carry <= mustClear {
+    private static func land(shot: Shot, power: Double, steer: Double, timing: Timing, boxOnly: Bool) -> StrokeResult {
+        if shot.direction.elevation.degrees < netFace || power < netPower {
             return StrokeResult(outcome: .net, timing: timing, announcement: "Into the net.", haptic: HapticVocabulary.mishit)
         }
-        if carry > mustNotPass {
+        if power > longPower {
             return StrokeResult(outcome: .outLong, timing: timing, announcement: "Long.", haptic: HapticVocabulary.mishit)
         }
-        let angle = shot.direction.horizontalAngle ?? 0
-        let lateral = carry * tan(angle.clamped(to: -0.6...0.6)) + steer
+
+        let yaw = (shot.direction.horizontalAngle ?? 0).degrees
+        let lateral = (yaw / yawToSideline).clamped(to: -1...1) * IncomingBall.halfWidth * 1.1 + steer
         if abs(lateral) > IncomingBall.halfWidth {
             return StrokeResult(outcome: .outWide, timing: timing, announcement: "Wide.", haptic: HapticVocabulary.mishit)
         }
 
-        let depth = ((carry - mustClear) / (mustNotPass - mustClear)).clamped(to: 0...1)
-        // Deep and fast is hard to return; short and slow is a gift. Angle
-        // helps too, up to the point where it would have gone wide.
-        let angleBonus = (abs(lateral) / IncomingBall.halfWidth) * 0.15
-        quality = (quality * (0.55 + 0.45 * depth) * min(exitSpeed / 30, 1) + angleBonus).clamped(to: 0...1)
+        // 0 at the net, 1 at the far edge of the target area.
+        let reach = (power - netPower) / (longPower - netPower)
+        // A serve's target is the service box, which ends 6.4 m past the net
+        // on an 11.9 m half.
+        let depth = boxOnly ? reach * (6.4 / IncomingBall.netDistance) : reach
+        let exitSpeed = shot.releaseSpeed * racketToBall
+
+        // Deep and hard is difficult; short and soft is a gift.
+        let quality = (timing.quality * (0.5 + 0.5 * reach) * (0.6 + 0.4 * min(power, 1))).clamped(to: 0...1)
 
         let placement = Placement(lateral: lateral, depth: depth, speed: exitSpeed, quality: quality)
         let words: String

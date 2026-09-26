@@ -33,11 +33,11 @@ public struct HapticScript: Hashable, Sendable {
     public var entries: [Entry]
     /// When, relative to the script's start, contact is meant to happen.
     ///
-    /// Not itself a cue. A swing takes a quarter of a second to arrive, so a
-    /// cue *at* contact is a cue the player is already too late for. Instead
-    /// the script is a count-in on an even grid — beat, beat, beat, BEAT — and
-    /// contact is exactly one more beat later. The hand extrapolates the
-    /// rhythm the way it claps on a downbeat nobody has played yet.
+    /// The script is a count-in on an even grid — beat, beat, beat, beat,
+    /// **HIT** — and contact is *on* the last, accented beat. The player
+    /// starts the swing on the fourth beat so the bat arrives as the fifth
+    /// lands. A version with contact one silent beat after the last cue was
+    /// tried and rejected: people want to hit the buzz, not the gap after it.
     public var contactAt: TimeInterval
 
     public init(entries: [Entry], contactAt: TimeInterval) {
@@ -55,20 +55,20 @@ public struct HapticScript: Hashable, Sendable {
     }
 
     /// A count-in: `beats` evenly spaced clicks starting at `start`, the last
-    /// one accented, with contact one more `interval` after the last.
+    /// one accented, and contact **on** that last beat.
     public static func countIn(
         beats: Int,
         interval: TimeInterval,
         startingAt start: TimeInterval = 0,
         leadIn: [Entry] = []
     ) -> HapticScript {
-        precondition(beats >= 1)
+        precondition(beats >= 2)
         var entries = leadIn
         for i in 0..<beats {
             let last = i == beats - 1
             entries.append(.init(at: start + Double(i) * interval, event: last ? HapticVocabulary.accent : HapticVocabulary.beat))
         }
-        return HapticScript(entries: entries, contactAt: start + Double(beats) * interval)
+        return HapticScript(entries: entries, contactAt: start + Double(beats - 1) * interval)
     }
 }
 
@@ -80,8 +80,7 @@ public enum HapticVocabulary {
     /// One beat of the count-in. Strong: the hand is gripping and about to
     /// move, and a faint tick is a tick it does not feel.
     public static let beat = HapticEvent.tap(intensity: 0.9, sharpness: 0.6)
-    /// The last beat before contact. In every bat-and-ball sport this is the
-    /// bounce, and the swing is timed off it — one beat later.
+    /// The hit beat. Contact is on this one.
     public static let accent = HapticEvent.tap(intensity: 1.0, sharpness: 1.0)
     /// A quiet tick outside the grid: a side call, a ready signal. Softer so
     /// it is never mistaken for a beat.

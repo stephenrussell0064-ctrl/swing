@@ -3,8 +3,8 @@ import SwingCore
 import SwingGame
 
 /// Drives a `TennisMatch` on a real clock. Every stroke begins from the
-/// ready position: hang the phone down, hold still, buzz, side call, count,
-/// swing. The rally continues as long as the ball does.
+/// ready position: hang the phone down, hold still, buzz, side call, five
+/// beats, hit on the fifth. The rally continues as long as the ball does.
 @MainActor
 @Observable
 final class TennisSession {
@@ -29,8 +29,6 @@ final class TennisSession {
     private let fixtures = FixtureStore.shared
     private var loop: Task<Void, Never>?
 
-    private let practiceSwings = 2
-
     init(source: any ShotSource, haptics: HapticPlayer, clicks: ClickPlayer, announcer: Announcer, handedness: Handedness) {
         self.match = TennisMatch(opponent: .clubPlayer, handedness: handedness, server: .you, gamesToWin: 4, seed: UInt64(Date().timeIntervalSince1970))
         self.source = source
@@ -43,6 +41,7 @@ final class TennisSession {
     func start() {
         guard !isRunning else { return }
         isRunning = true
+        source.profile = profile
         source.handler = { [weak self] shot, trace in
             self?.inbox.push(shot, trace: trace)
         }
@@ -72,25 +71,16 @@ final class TennisSession {
     private func run() async {
         headline = "Ready position"
         detail = "Hang the phone down like a racket, screen facing the net. Hold still."
-        announcer.sayNow("Tennis. Hang the phone down like a racket, with the screen facing the net, and hold still.")
+        announcer.sayNow("Tennis. First to four games. Hang the phone down like a racket, screen facing the net, and hold still. One tick is forehand, two is backhand. Then five beats: hit the ball on the fifth, the high one.")
         stage = .stance
-        guard await source.awaitStance(timeout: 120), !Task.isCancelled else { return }
-        haptics.play(ReadyCue.haptic)
-
-        await learnSwing()
-        if Task.isCancelled { return }
-
-        announcer.say(String(format: "Your swing takes about %.1f seconds, so that is the beat. First to four games. One tick is forehand, two is backhand, then four beats, and swing to meet the fifth.", profile.beat))
-        headline = String(format: "Beat: %.1f s", profile.beat)
-        detail = "One tick forehand, two backhand. Four beats, swing to meet the fifth."
-        try? await Task.sleep(for: .seconds(8))
+        try? await Task.sleep(for: .seconds(1))
 
         while !Task.isCancelled {
             guard let (script, tolerance) = match.nextScript(for: profile) else {
                 if case .over = match.state {
                     stage = .finished
                     headline = match.score.gameAnnouncement
-                    detail = "Tap Restart to play again."
+                    detail = "Restart from the menu to play again."
                     isRunning = false
                 }
                 return
@@ -98,7 +88,7 @@ final class TennisSession {
 
             stage = .stance
             headline = "Ready position"
-            guard await source.awaitStance(timeout: 120), !Task.isCancelled else { return }
+            guard await source.awaitStance(timeout: 300), !Task.isCancelled else { return }
             haptics.play(ReadyCue.haptic)
             try? await Task.sleep(for: .milliseconds(400))
 
@@ -111,7 +101,7 @@ final class TennisSession {
                 detail = String(format: "%@ · %.0f mph", ball.side.rawValue.capitalized, ball.pace * 2.237)
             } else {
                 incoming = nil
-                detail = "Four beats, then serve."
+                detail = "Five beats. Serve on the fifth."
             }
             let start = Date.timeIntervalSinceReferenceDate + 0.3
             let cue = Cue(script: script, startingAt: start, tolerance: tolerance)
@@ -158,40 +148,6 @@ final class TennisSession {
                 }
                 try? await Task.sleep(for: .seconds(2.5))
             }
-        }
-    }
-
-    private func learnSwing() async {
-        for n in 1...practiceSwings where !Task.isCancelled {
-            stage = .profiling(n)
-            if n == 1 {
-                announcer.sayNow("Set. Take one full practice swing, as if a ball were there.")
-                headline = "Practice swing"
-                detail = "A full swing, from the ready position."
-            } else {
-                stage = .stance
-                headline = "Ready position"
-                guard await source.awaitStance(timeout: 120), !Task.isCancelled else { return }
-                haptics.play(ReadyCue.haptic)
-                announcer.sayNow("Once more.")
-                headline = "Once more"
-            }
-            inbox.clear()
-            let swings = await inbox.swings(notBefore: Date.timeIntervalSinceReferenceDate, firstWithin: 15, window: 1.2)
-            guard let best = swings.max(by: { $0.shot.spinRate < $1.shot.spinRate }) else {
-                announcer.say("Didn't catch that.")
-                continue
-            }
-            if let measured = SwingProfile.measured(from: best.shot) {
-                profile = n == 1 ? measured : profile.merging(swingDuration: measured.swingDuration, peakRotation: measured.peakRotation)
-                source.profile = profile
-            }
-            haptics.play(HapticVocabulary.cleanStrike)
-            detail = String(format: "%.2f s to contact · %.0f rad/s at the peak", best.shot.tempo.back, best.shot.spinRate)
-            fixtures.save(
-                best.shot, trace: best.trace, prefix: "swing-profile",
-                note: "Practice swing \(n) of \(practiceSwings), no ball. Duration \(String(format: "%.2f", best.shot.tempo.back)) s, peak \(String(format: "%.1f", best.shot.spinRate)) rad/s."
-            )
         }
     }
 

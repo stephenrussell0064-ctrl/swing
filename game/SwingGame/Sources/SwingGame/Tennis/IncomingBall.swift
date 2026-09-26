@@ -5,7 +5,7 @@ import SwingCore
 ///
 /// The screen is in the player's hand, so the ball is described to the hand:
 /// which side it is coming to (one tick forehand, two ticks backhand), then a
-/// count-in of four beats, the last accented, and contact one beat later.
+/// count-in of five beats, the last accented, and contact on that last beat.
 /// The beat is the player's own swing (``SwingProfile``), a little shorter
 /// for a harder-hit ball.
 public struct IncomingBall: Hashable, Sendable {
@@ -38,7 +38,7 @@ public struct IncomingBall: Hashable, Sendable {
     static let netDistance = courtLength / 2
     static let serviceLine = netDistance + 6.4
 
-    public static let beats = 4
+    public static let beats = 5
 
     /// How the player's beat is scaled: a 22 m/s rally ball is their own
     /// beat, a 32 m/s drive is three-quarters of it.
@@ -79,10 +79,9 @@ public struct IncomingBall: Hashable, Sendable {
 
 /// Your own serve. Nothing is coming; the count is your toss.
 public enum Serve {
-    /// Four beats and hit on the fifth, like everything else, at the
-    /// player's own pace.
+    /// Five beats, hit on the fifth, like everything else.
     public static func script(for profile: SwingProfile) -> HapticScript {
-        HapticScript.countIn(beats: 4, interval: profile.beat)
+        HapticScript.countIn(beats: IncomingBall.beats, interval: profile.beat)
     }
     /// Self-paced, so generous.
     public static func tolerance(for profile: SwingProfile) -> TimeInterval {
